@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Look up</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@300;400&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;overflow:hidden;background:#03050c;color:#cfd8ee;font-family:'Cormorant Garamond',Georgia,serif}
+.layer{position:absolute;left:-24px;top:-24px;width:calc(100% + 48px);height:calc(100% + 48px);will-change:transform}
+#grain{position:fixed;inset:-50%;z-index:8;pointer-events:none;opacity:.08;mix-blend-mode:overlay;animation:gr 1s steps(6) infinite}
+@keyframes gr{0%{transform:translate(0,0)}20%{transform:translate(-3%,2%)}40%{transform:translate(2%,-3%)}60%{transform:translate(-2%,-1%)}80%{transform:translate(3%,3%)}}
+@media (prefers-reduced-motion:reduce){#grain{animation:none}}
+.hud{position:fixed;z-index:10;left:50%;transform:translateX(-50%);text-align:center;opacity:0;pointer-events:none;transition:opacity 2.5s ease}
+.hud.on{opacity:1;pointer-events:auto}
+button{font:inherit;color:#cfd8ee;background:rgba(10,16,38,.45);border:1px solid rgba(170,190,235,.28);border-radius:2px;padding:.55em 1.3em;cursor:pointer;letter-spacing:.08em;font-size:18px;transition:border-color .3s,background .3s}
+button:hover,button:focus-visible{border-color:rgba(242,184,102,.7);background:rgba(30,30,50,.6);outline:none}
+#intro{top:40%}
+#intro h1{font-weight:300;font-size:clamp(40px,5.5vw,84px);letter-spacing:.28em;padding-left:.28em;margin-bottom:2.2rem}
+#hint{top:4.5%;font-size:17px;letter-spacing:.2em;opacity:0;transition:opacity 1.5s}
+#hint.on{opacity:.55}
+#msg{top:46%;width:min(760px,88vw)}
+#msg p{font-size:clamp(22px,2.4vw,34px);line-height:1.55;font-weight:300;margin:.5em 0;opacity:0;filter:blur(6px);transition:opacity 4s ease,filter 4s ease;text-shadow:0 0 22px rgba(120,150,230,.35)}
+#msg p:first-child{font-style:italic;font-size:clamp(26px,3vw,42px)}
+#msg p.in{opacity:.92;filter:blur(0)}
+#ctl{bottom:16px;left:auto;right:16px;transform:none}
+#ctl button{padding:.3em .8em;font-size:15px;margin-left:6px}
+#note{position:fixed;z-index:10;left:18px;top:16px;max-width:46ch;font-size:15px;font-style:italic;opacity:.6}
+#player{position:fixed;z-index:5;left:57vw;bottom:4vh;width:clamp(220px,17vw,330px);opacity:0;transition:opacity 3s ease,filter 1s;filter:drop-shadow(0 0 16px rgba(242,184,102,.32));pointer-events:none}
+#tape{position:fixed;z-index:6;left:0;top:0;width:clamp(100px,9vw,150px);opacity:0;transition:opacity 3s ease;touch-action:none;cursor:grab;filter:drop-shadow(0 0 12px rgba(242,184,102,.4));will-change:transform}
+#tape.held{cursor:grabbing}
+#player.show,#tape.show{opacity:1}
+#player.near{filter:drop-shadow(0 0 22px rgba(255,205,130,.75))}
+#player.ready:not(.near){filter:drop-shadow(0 0 8px rgba(242,184,102,.15))}
+#ins{opacity:0;transition:opacity .15s}#player.loaded #ins{opacity:1}
+#door{transform-box:fill-box;transform-origin:50% 0;transform:scaleY(.12);transition:transform .45s cubic-bezier(.3,1.5,.5,1)}
+#player.closed #door{transform:scaleY(1)}
+#led{fill:#3a1a14;transition:fill .3s}#player.led #led{fill:#ff8a3d;filter:drop-shadow(0 0 5px #ff8a3d)}
+#bp{transition:transform .15s}#player.led #bp{transform:translateY(3px)}
+.reel{transform-box:fill-box;transform-origin:center}
+body.spin .reel{animation:sp 2.4s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style></head>
+<body>
+<canvas id="sky" class="layer"></canvas><canvas id="far" class="layer"></canvas><canvas id="near" class="layer"></canvas>
+<canvas id="fx" class="layer"></canvas><canvas id="ocean" class="layer"></canvas><canvas id="beach" class="layer"></canvas>
+<div id="grain"></div>
+
+<svg id="player" viewBox="0 0 300 170" aria-hidden="true">
+ <defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b2e38"/><stop offset="1" stop-color="#13151b"/></linearGradient></defs>
+ <rect x="4" y="12" width="292" height="150" rx="14" fill="url(#pg)" stroke="#3b3f4d"/>
+ <rect x="110" y="4" width="80" height="12" rx="4" fill="#1d2027" stroke="#3b3f4d"/>
+ <rect id="slot" x="22" y="28" width="170" height="86" rx="8" fill="#06070b" stroke="#000"/>
+ <g id="ins"><rect x="30" y="35" width="154" height="72" rx="5" fill="#2b2620" stroke="#4a4034"/><rect x="42" y="42" width="130" height="30" rx="3" fill="#d6b87a"/><rect x="62" y="76" width="90" height="22" rx="10" fill="#0a0a0c"/>
+  <g transform="translate(80,87)"><g class="reel"><circle r="8" fill="#15151a" stroke="#8c7a5a"/><path d="M-8 0H8M0-8V8" stroke="#8c7a5a"/></g></g>
+  <g transform="translate(134,87)"><g class="reel"><circle r="8" fill="#15151a" stroke="#8c7a5a"/><path d="M-8 0H8M0-8V8" stroke="#8c7a5a"/></g></g></g>
+ <g id="door"><rect x="22" y="28" width="170" height="86" rx="8" fill="#9db4d4" fill-opacity=".1" stroke="#8aa0c4" stroke-opacity=".4"/><path d="M30 36L110 36L66 66Z" fill="#fff" fill-opacity=".05"/></g>
+ <g stroke="#0a0b0f" stroke-width="3" opacity=".8"><path d="M214 56H280M214 68H280M214 80H280M214 92H280M214 104H280"/></g>
+ <circle id="led" cx="262" cy="36" r="4.5"/>
+ <g fill="#3a3d49" stroke="#0a0b0f"><rect x="22" y="128" width="38" height="22" rx="3"/><rect x="66" y="128" width="38" height="22" rx="3"/><rect id="bp" x="110" y="128" width="38" height="22" rx="3" fill="#4a4d5b"/><rect x="154" y="128" width="38" height="22" rx="3"/><rect x="198" y="128" width="38" height="22" rx="3"/></g>
+ <path d="M124 139l12 0M130 134l0 10" stroke="#aab" stroke-opacity=".0"/>
+</svg>
+
+<svg id="tape" viewBox="0 0 160 104" aria-label="Cassette tape">
+ <rect x="3" y="3" width="154" height="98" rx="7" fill="#2b2620" stroke="#4a4034" stroke-width="2"/>
+ <rect x="14" y="12" width="132" height="40" rx="3" fill="#d6b87a"/><path d="M22 36H138" stroke="#7a6038" stroke-width="1"/><path d="M24 24H70" stroke="#7a6038" stroke-width="2"/>
+ <rect x="38" y="58" width="84" height="26" rx="13" fill="#0a0a0c"/>
+ <g transform="translate(60,71)"><g class="reel"><circle r="9" fill="#15151a" stroke="#8c7a5a"/><path d="M-9 0H9M0-9V9" stroke="#8c7a5a"/></g></g>
+ <g transform="translate(100,71)"><g class="reel"><circle r="9" fill="#15151a" stroke="#8c7a5a"/><path d="M-9 0H9M0-9V9" stroke="#8c7a5a"/></g></g>
+ <path d="M30 101L40 88H120L130 101Z" fill="#1b1814"/><circle cx="12" cy="92" r="2.5" fill="#0a0a0c"/><circle cx="148" cy="92" r="2.5" fill="#0a0a0c"/>
+</svg>
+
+<div id="intro" class="hud"><h1 id="introLine"></h1><button id="enter">Enter</button></div>
+<div id="hint" class="hud"></div>
+<div id="msg" class="hud on" aria-live="polite"></div>
+<div id="ctl" class="hud"><button id="mute" aria-label="Mute music">♪</button><button id="pause" aria-label="Pause music" style="display:none">❙❙</button></div>
+<div id="note"></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   CONFIG: everything you'll want to edit lives here.
+   ===================================================================== */
+const CONFIG = {
+
+  /* ============ 1. ALL TEXT ============ */
+  text: {
+    pageTitle:   "stay",
+    introLine:   "my bleuberry",                       // big line on the first screen
+    enterButton: "Enter",
+    hint:        "Click the glowing star",         // small line at the top while lighting stars
+    // Your personal ending. One string per line (add or remove lines freely).
+    message: [
+      "Vibha,",
+      "Happy birthday.",
+      "To the dearest bleuberry, I love you to insanity."
+    ],
+    audioMissing: "Couldn't play {file}. Add your own copy next to index.html. Running silently on a short placeholder timeline.",
+    // Screen-reader / tooltip labels
+    tapeLabel: "Cassette tape. Click or drag it to the player.",
+    mute: "Mute sound", unmute: "Unmute sound", pause: "Pause music", resume: "Resume music"
+  },
+
+  /* ============ 2. SOUND EFFECTS ============
+     For each effect:  src: null      -> built-in synthesised sound (default)
+                       src: "x.mp3"   -> your own file (any format the browser plays, next to index.html)
+                       src: false     -> silent
+     volume: 0 to 1 (1 = normal). If your file fails to load, the built-in sound plays instead. */
+  sfx: {
+    starLit:           { src: "audio/star.mp3",  volume: 1 },   // each time a star is lit
+    constellationDone: { src: "audio/done.mp3",  volume: 1 },   // when the last star connects
+    tapePickup:        { src: false, volume: 1 },   // when she picks the cassette up (silent by default)
+    cassetteInsert:    { src: null,  volume: 1 },   // cassette slides into the player
+    doorClose:         { src: null,  volume: 1 }    // the compartment door shutting
+  },
+
+  /* ============ 3. AMBIENT MUSIC ============
+     Loops quietly from the moment she presses Enter, then fades down while the song plays.
+     Leave src as null to have no ambient music. */
+  ambient: {
+    src: "audio/ambience.mp3",
+    volume: 0.35,         // 0 to 1
+    fadeInSec: 6,
+    duckAt: "CASSETTE_REVEAL", // fades out when this stage begins (INTRO, CONSTELLATION, CASSETTE_REVEAL, SONG_PLAYING...)
+    duckTo: 0,            // volume after fading (0 = silent)
+    duckFadeSec: 5,
+    returnAfterSong: false
+  },
+  /* Faint water sound, loops under everything. Roughly a third of the ambient volume. */
+  water: {
+    src: "audio/water.mp3",
+    volume: 0.12,
+    fadeInSec: 6,
+    duckAt: "SONG_PLAYING", // drops to a whisper when the song starts, never fully off
+    duckTo: 0.04,
+    duckFadeSec: 5,
+    returnAfterSong: false
+  },
+
+  /* ============ 4. SILHOUETTE OF THE TWO PEOPLE ============
+     Option A: set src to a PNG/SVG with a transparent background (a dark figure works best).
+     Option B: leave src null and edit the drawPeople() function further down. */
+  silhouette: {
+    src: "images/sillouette.png",
+    x: 0.23,              // horizontal centre, 0 (left) to 1 (right)
+    bottom: 0.96,         // where the base sits, as a fraction of screen height
+    height: 0.2,          // image height as a fraction of screen height
+    flip: false,
+    glow: true            // soft silver rim light around the image
+  },
+
+  audio: { src: "audio/MS.mp3" },          // put your own legal copy next to index.html
+  timeline: { meteorStart: 12, peak: 44 },     // seconds into the song: 1:53 first meteor, 2:56 peak
+  fallbackTimeline: { meteorStart: 6, peak: 40 },// used only if the audio file can't play (silent)
+  endingDelayAfterPeak: 18,                      // seconds after the peak before the message appears
+  timing: { holdMs: 6500, starGlowDelayMs: 900, lineMs: 850, messageLineGapMs: 4200 },
+  // "Stay Here": star points per letter, [x, y, connectTo?] in a 1x1 box (y down).
+  // connectTo: omitted = previous star, -1 = starts a new stroke, n = connect to local star n.
+  letters: [
+    {p:[[.95,.1],[.4,0],[.05,.3],[.9,.7],[.5,1],[0,.9]]},                          // S
+    {p:[[0,0],[.5,0],[1,0],[.5,1,1]]},                                              // T
+    {p:[[0,1],[.5,0],[1,1],[.25,.62,-1],[.75,.62]]},                                // A
+    {p:[[0,0],[.5,.5],[1,0,1],[.5,1,1]]},                                           // Y
+    {gap:true},
+    {p:[[0,0],[0,.5],[0,1],[1,.5,1],[1,0],[1,1,3]]},                                // H
+    {p:[[1,0],[0,0],[0,.5],[0,1],[1,1],[.7,.5,2]]},                                 // E
+    {p:[[0,1],[0,0],[.85,.1],[.7,.5],[0,.5],[1,1,3]]},                              // R
+    {p:[[1,0],[0,0],[0,.5],[0,1],[1,1],[.7,.5,2]]}                                  // E
+  ]
+};
+
+/* ---------- helpers ---------- */
+const $=id=>document.getElementById(id), clamp=(v,a,b)=>Math.min(b,Math.max(a,v)), ease=t=>t*t*(3-2*t);
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches, TOUCH=matchMedia('(pointer:coarse)').matches;
+const SEEK=+new URLSearchParams(location.search).get('seek')||0; // ?seek=110 jumps the song for testing
+const rng=a=>()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+const gauss=r=>(r()+r()+r()-1.5)/1.5, hash=n=>{const x=Math.sin(n*127.1)*43758.5453;return x-Math.floor(x)-.5};
+const show=(e,on=true)=>e.classList.toggle('on',on);
+
+/* ---------- ExperienceController: explicit state machine ---------- */
+const FLOW={INTRO:['CONSTELLATION'],CONSTELLATION:['CASSETTE_REVEAL'],CASSETTE_REVEAL:['TAPE_INSERTION'],
+  TAPE_INSERTION:['SONG_PLAYING'],SONG_PLAYING:['METEOR_SHOWER'],METEOR_SHOWER:['ENDING'],ENDING:[]};
+let S='INTRO';
+function go(n){ if(!FLOW[S].includes(n)) return false; S=n; document.body.dataset.stage=n; LOOPS.forEach(l=>l.onStage(n)); (onEnter[n]||(()=>{}))(); return true; }
+const onEnter={
+  CONSTELLATION(){ show($('intro'),false); show($('ctl')); arm(2200); },
+  CASSETTE_REVEAL(){ $('player').classList.add('show'); $('tape').classList.add('show'); setHint(''); },
+  TAPE_INSERTION(){ $('tape').classList.add('held'); },
+  SONG_PLAYING(){ $('pause').style.display=''; },
+  METEOR_SHOWER(){ spawn(true); },
+  ENDING(){ revealMessage(); }
+};
+function setHint(t){ const h=$('hint'); h.textContent=t; h.classList.toggle('on',!!t); h.style.opacity=t?'':0; }
+function revealMessage(){ const m=$('msg'); CONFIG.text.message.forEach((t,i)=>{const p=document.createElement('p');p.textContent=t;m.appendChild(p);setTimeout(()=>p.classList.add('in'),1500+i*CONFIG.timing.messageLineGapMs);}); }
+
+/* ---------- Sound effects (synthesised; no copyrighted audio) ---------- */
+let ac, master, MUTED=false;
+function tone(f,d,g=.05,type='sine',at=0){ if(!ac)return; const o=ac.createOscillator(),a=ac.createGain(),t=ac.currentTime+at;
+  o.type=type;o.frequency.value=f;a.gain.setValueAtTime(0,t);a.gain.linearRampToValueAtTime(g,t+.02);a.gain.exponentialRampToValueAtTime(.0001,t+d);
+  o.connect(a).connect(master);o.start(t);o.stop(t+d+.05); }
+function click(v=1){ if(!ac)return; const n=ac.sampleRate*.05|0,b=ac.createBuffer(1,n,ac.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,3);
+  const s=ac.createBufferSource(),f=ac.createBiquadFilter(),g=ac.createGain();f.type='bandpass';f.frequency.value=1800;g.gain.value=.5*v;
+  s.buffer=b;s.connect(f).connect(g).connect(master);s.start();tone(120,.1,.15*v,'triangle'); }
+/* Built-in synthesised versions: used whenever CONFIG.sfx[name].src is null (or its file fails). */
+const SYNTH={
+  starLit:v=>{tone(784,1.4,.04*v);tone(1176,1.8,.025*v,'sine',.08)},
+  constellationDone:v=>[523,659,784,1047,1319].forEach((f,i)=>tone(f,3,.03*v,'sine',i*.2)),
+  tapePickup:v=>click(v*.5),
+  cassetteInsert:v=>click(v),
+  doorClose:v=>click(v*.8)
+};
+function sfx(name){ const c=CONFIG.sfx[name]; if(!c||c.src===false)return;
+  if(c.src){ const a=new Audio(c.src); a.volume=clamp(c.volume,0,1); a.muted=MUTED;
+    a.play().catch(()=>SYNTH[name]&&SYNTH[name](c.volume)); return; }
+  SYNTH[name]&&SYNTH[name](c.volume); }
+function setMuted(m){ MUTED=m; if(master)master.gain.value=m?0:1; if(Song.el)Song.el.muted=m; LOOPS.forEach(l=>{if(l.el)l.el.muted=m});
+  $('mute').style.opacity=m?.4:1; $('mute').setAttribute('aria-label',m?CONFIG.text.unmute:CONFIG.text.mute); }
+
+/* ---------- AudioController ---------- */
+const Song={el:null,ok:false,failed:false,v:0,paused:false,muted:false,
+  init(){ this.el=new Audio(); this.el.preload='auto'; this.el.src=CONFIG.audio.src;
+    this.el.onerror=()=>{this.failed=true};
+    this.el.onended=()=>{this.v=this.el.duration||this.v;this.ok=false;$('pause').style.display='none';document.body.classList.remove('spin'); LOOPS.forEach(l=>l.songEnded()); }; },
+  async play(){ this.started=true; this.el.muted=MUTED; try{ if(this.failed) throw new Error('missing'); if(SEEK) this.el.currentTime=SEEK; await this.el.play(); this.ok=true; }
+    catch(e){ this.ok=false; this.silent=true; if(SEEK)this.v=SEEK; $('note').textContent=CONFIG.text.audioMissing.replace('{file}',CONFIG.audio.src); } },
+  started:false,
+  tick(dt){ if(this.started&&!this.ok&&!this.paused) this.v+=dt; },
+  time(){ return this.ok?this.el.currentTime:this.v; },
+  silent:false,
+  tl(){ return this.silent?CONFIG.fallbackTimeline:CONFIG.timeline; },
+  togglePause(){ this.paused=!this.paused; if(this.ok) this.paused?this.el.pause():this.el.play(); document.body.classList.toggle('spin',!this.paused); $('pause').setAttribute('aria-label',this.paused?CONFIG.text.resume:CONFIG.text.pause); }};
+$('mute').onclick=()=>setMuted(!MUTED); $('pause').onclick=()=>Song.togglePause();
+
+/* ---------- Looping beds (ambient music, water): both use the same controller ---------- */
+function makeLoop(key){ return {el:null,target:0,
+  start(){ const A=CONFIG[key]; if(!A||!A.src)return;
+    this.el=new Audio(A.src); this.el.loop=true; this.el.volume=0; this.el.muted=MUTED; this.target=A.volume;
+    this.el.onerror=()=>{this.el=null}; this.el.play().catch(()=>{}); },
+  onStage(st){ const A=CONFIG[key]; if(this.el&&A.duckAt===st)this.target=A.duckTo; },
+  songEnded(){ const A=CONFIG[key]; if(this.el&&A.returnAfterSong)this.target=A.volume; },
+  update(dt){ if(!this.el)return; const A=CONFIG[key], v=this.el.volume, down=this.target<v,
+    rate=1/Math.max(.1,down?A.duckFadeSec:A.fadeInSec); this.el.volume=clamp(v+clamp(this.target-v,-rate*dt,rate*dt),0,1); }}; }
+const Ambient=makeLoop('ambient'), Water=makeLoop('water'), LOOPS=[Ambient,Water];
+
+/* ---------- NightScene: layers, parallax, ocean, beach ---------- */
+const names=['sky','far','near','fx','ocean','beach'], amp={sky:3,far:6,near:9,fx:9,ocean:5,beach:2}, cv={}, cx={};
+names.forEach(n=>{cv[n]=$(n);cx[n]=cv[n].getContext('2d');});
+let W,H,HZ,DPR,mx=0,my=0,tx=0,ty=0;
+addEventListener('pointermove',e=>{ if(!TOUCH&&!RM){ tx=e.clientX/innerWidth*2-1; ty=e.clientY/innerHeight*2-1; } });
+function glow(c,x,y,r,a,col='190,210,255'){ const g=c.createRadialGradient(x,y,0,x,y,r); g.addColorStop(0,`rgba(${col},${a})`); g.addColorStop(1,`rgba(${col},0)`); c.fillStyle=g; c.fillRect(x-r,y-r,r*2,r*2); }
+
+function drawSky(){ const c=cx.sky,r=rng(7);
+  let g=c.createLinearGradient(0,0,0,HZ); g.addColorStop(0,'#02030a'); g.addColorStop(.45,'#070d26'); g.addColorStop(.82,'#141c47'); g.addColorStop(1,'#2b3363');
+  c.fillStyle=g; c.fillRect(-24,-24,W+48,H+48);
+  c.save(); c.translate(W*.62,H*.26); c.rotate(-.5);
+  for(let i=0;i<46;i++){ const x=(r()-.5)*W*1.3,y=gauss(r)*H*.07,rad=H*(.07+r()*.12); glow(c,x,y,rad,.05,'150,165,230'); }
+  for(let i=0;i<1500;i++){ c.fillStyle=`rgba(200,210,255,${.06+r()*.26})`; c.fillRect((r()-.5)*W*1.3,gauss(r)*H*.065,1,1); }
+  c.restore();
+  for(let i=0;i<9;i++){ c.save(); c.translate(r()*W,HZ*(.4+r()*.5)); c.scale(2.5+r()*3,.28+r()*.25); glow(c,0,0,H*.08,.07,'110,120,185'); c.restore(); }
+  glow(c,W*.5,HZ,W*.5,.07,'150,120,140'); }
+
+let far=[],near=[];
+function makeStars(){ const r=rng(11);
+  far=Array.from({length:650},()=>({x:r()*(W+48)-24,y:r()*HZ*.99,s:.4+r()*.8,a:.2+r()*.5,p:r()*6.28,f:.3+r()*1.2}));
+  near=Array.from({length:150},()=>({x:r()*(W+48)-24,y:r()*HZ*.97,s:.9+r()*1.2,a:.45+r()*.5,p:r()*6.28,f:.4+r()*1.5,w:r()<.15})); }
+function drawStars(c,list,t,tw){ c.clearRect(-24,-24,W+48,H+48);
+  for(const s of list){ const a=s.a*(1-tw+tw*(.5+.5*Math.sin(t*s.f+s.p)));
+    c.fillStyle=s.w?`rgba(255,226,180,${a})`:`rgba(215,225,255,${a})`;
+    if(s.s<1)c.fillRect(s.x,s.y,s.s*1.4,s.s*1.4); else{c.beginPath();c.arc(s.x,s.y,s.s,0,6.3);c.fill();} } }
+
+function shore(x){ return H*.8+Math.sin(x/W*8+1)*H*.006; }
+function person(c,x,y,s,lean){ c.save(); c.translate(x,y); c.scale(s,s); c.fillStyle='#010205'; c.strokeStyle='rgba(150,175,230,.3)'; c.lineWidth=1.3/s; c.shadowColor='rgba(120,150,220,.45)'; c.shadowBlur=9;
+  c.beginPath(); c.moveTo(-24,2); c.bezierCurveTo(-27,-22,-22,-42,-10,-49); c.lineTo(-4,-53); c.lineTo(4,-53); c.lineTo(10,-49); c.bezierCurveTo(22,-42,27,-22,24,2); c.closePath(); c.fill(); c.stroke();
+  c.beginPath(); c.ellipse(lean,-65,9,10.5,lean*.02,0,6.3); c.fill(); c.stroke(); c.restore(); }
+/* ===== SILHOUETTE =====
+   Easiest: set CONFIG.silhouette.src to your own transparent PNG/SVG.
+   Or edit the default drawing below. c = 2D canvas context in screen pixels; W and H are the screen size.
+   person(c, x, y, scale, headLean) draws one seated figure; replace those two calls with your own shapes. */
+let silImg=null;
+function drawPeople(c){ const S_=CONFIG.silhouette;
+  if(S_.src&&silImg&&silImg.complete&&silImg.naturalWidth){
+    const h=H*S_.height, w=h*silImg.naturalWidth/silImg.naturalHeight;
+    c.save(); c.translate(W*S_.x,H*S_.bottom); if(S_.flip)c.scale(-1,1);
+    if(S_.glow){ c.shadowColor='rgba(120,150,220,.5)'; c.shadowBlur=9; }
+    c.drawImage(silImg,-w/2,-h,w,h); c.restore(); return; }
+  const s=H/900*1.7; person(c,W*.2,H*.945,s,4); person(c,W*.2+50*s,H*.95,s*.95,-5); }
+
+function drawBeach(){ const c=cx.beach,r=rng(23);
+  c.clearRect(-24,-24,W+48,H+48);
+  c.beginPath(); c.moveTo(-24,H+24); for(let x=-24;x<=W+24;x+=12)c.lineTo(x,shore(x)); c.lineTo(W+24,H+24); c.closePath();
+  const g=c.createLinearGradient(0,H*.78,0,H); g.addColorStop(0,'#232c47'); g.addColorStop(.3,'#121829'); g.addColorStop(1,'#07090f'); c.fillStyle=g; c.fill();
+  c.save(); c.clip();
+  for(let i=0;i<2600;i++){ c.fillStyle=`rgba(70,85,120,${r()*.09})`; c.fillRect(r()*W,H*.8+r()*H*.2,1.2,1.2); } c.restore();
+  c.strokeStyle='rgba(170,190,225,.14)'; c.lineWidth=1.2; c.beginPath(); for(let x=-24;x<=W+24;x+=12){x<0?c.moveTo(x,shore(x)):c.lineTo(x,shore(x));} c.stroke();
+  drawPeople(c);
+  c.fillStyle='#010205'; c.shadowBlur=0; [[.03,.99,28,110],[.1,1,16,70],[.93,.99,26,120],[.87,1,18,80],[.5,1.01,8,50]].forEach(([a,b,n,h])=>grass(c,W*a,H*b,n,h*H/900,r)); }
+function grass(c,x,y,n,h,r){ for(let i=0;i<n;i++){ const bx=x+(r()-.5)*80,bh=h*(.4+r()*.9),l=(r()-.5)*bh*.8;
+  c.beginPath(); c.moveTo(bx-2,y); c.quadraticCurveTo(bx+l*.3,y-bh*.6,bx+l,y-bh); c.quadraticCurveTo(bx+l*.3+2,y-bh*.55,bx+3,y); c.fill(); } }
+
+let shim=[];
+function makeShim(){ const r=rng(5); shim=Array.from({length:110},()=>({x:W*.58+gauss(r)*W*.45,d:r(),f:.6+r()*1.4,p:r()*6.28})); }
+function drawOcean(t){ const c=cx.ocean,oh=H*.86-HZ; c.clearRect(-24,-24,W+48,H+48);
+  const g=c.createLinearGradient(0,HZ,0,HZ+oh); g.addColorStop(0,'#232b58'); g.addColorStop(.25,'#0c1330'); g.addColorStop(1,'#040612'); c.fillStyle=g; c.fillRect(-24,HZ,W+48,oh);
+  c.fillStyle='rgba(160,180,230,.22)'; c.fillRect(-24,HZ,W+48,1);
+  for(const s of shim){ const y=HZ+Math.pow(s.d,1.6)*oh*.95, a=(.04+.15*Math.max(0,Math.sin(t*s.f+s.p)))*(.3+s.d*.7);
+    c.fillStyle=`rgba(170,195,235,${a})`; c.fillRect(s.x,y,8+s.d*60,1+s.d*1.4); } }
+
+/* ---------- StarField: constellation, particles, meteors ---------- */
+let stars=[],lit=0,armed=false,nextAt=0,cdim=1,glowK=0;
+const parts=[],meteors=[];
+function buildConstellation(){ stars=[]; let gi=0;
+  CONFIG.letters.forEach(L=>{ if(L.gap){stars.gapAfter=1;return;} const base=stars.length;
+    L.p.forEach((q,i)=>{ const c=q[2]===undefined?(i?base+i-1:-1):(q[2]===-1?-1:base+q[2]); stars.push({nx:q[0],ny:q[1],c,lit:0,lineT:0,L:gi}); }); gi++; }); }
+function layout(){ if(!stars.length)buildConstellation();
+  const rows=CONFIG.letters; let totalW=0; rows.forEach((L,i)=>{ if(L.gap)totalW+=.65; else totalW+=1+(i<rows.length-1?.45:0); });
+  const u=Math.min(W*.62/totalW,H*.24/1.5); let x=W/2-totalW*u/2; const top=H*.13; let si=0;
+  rows.forEach((L,i)=>{ if(L.gap){x+=.65*u;return;}
+    L.p.forEach(q=>{ const s=stars[si]; s.px=x+(q[0]+(1-q[1])*.14)*u+hash(si)*u*.07; s.py=top+q[1]*1.5*u+hash(si+99)*u*.07; si++; });
+    x+=1.45*u; }); }
+function activate(){ const now=performance.now();
+  if(S!=='CONSTELLATION'||!armed||now<nextAt||lit>=stars.length) return;
+  const s=stars[lit]; s.lit=now; if(s.c>=0)s.lineT=now; lit++; nextAt=now+CONFIG.timing.starGlowDelayMs+CONFIG.timing.lineMs*.5;
+  for(let i=0;i<12;i++){ const a=Math.random()*6.28,v=10+Math.random()*35; parts.push({x:s.px,y:s.py,vx:Math.cos(a)*v,vy:Math.sin(a)*v,l:1.4,m:1.4}); }
+  sfx('starLit');
+  if(lit===stars.length){ armed=false; setHint(''); setTimeout(()=>sfx('constellationDone'),CONFIG.timing.lineMs); setTimeout(()=>go('CASSETTE_REVEAL'),CONFIG.timing.holdMs); } }
+addEventListener('pointerdown',e=>{ if(S!=='CONSTELLATION'||!armed||performance.now()<nextAt||lit>=stars.length)return;
+  const s=stars[lit]; if(Math.hypot(e.clientX-s.px,e.clientY-s.py)<60) activate(); });
+addEventListener('pointermove',e=>{ if(S==='CONSTELLATION'&&armed&&lit<stars.length&&performance.now()>=nextAt){ const s=stars[lit]; document.body.style.cursor=Math.hypot(e.clientX-s.px,e.clientY-s.py)<60?'pointer':''; } });
+
+function drawConst(c,now){ const cd=cdim;
+  c.lineCap='round'; c.globalCompositeOperation='lighter';
+  stars.forEach(s=>{ if(!s.lineT)return; const a=stars[s.c],p=ease(clamp((now-s.lineT)/CONFIG.timing.lineMs,0,1)),x=a.px+(s.px-a.px)*p,y=a.py+(s.py-a.py)*p;
+    c.strokeStyle=`rgba(190,210,255,${.55*cd})`; c.lineWidth=1.1; c.beginPath(); c.moveTo(a.px,a.py); c.lineTo(x,y); c.stroke();
+    if(p<1){ glow(c,x,y,12,.9); if(Math.random()<.5)parts.push({x,y,vx:(Math.random()-.5)*14,vy:(Math.random()-.5)*14,l:.8,m:.8}); } });
+  stars.forEach((s,i)=>{
+    if(s.lit){ const k=ease(clamp((now-s.lit)/1400,0,1)); glow(c,s.px,s.py,10+(1-k)*22,(.35+(1-k)*.5)*Math.max(cd,.35)); c.fillStyle=`rgba(235,242,255,${.95*Math.max(cd,.45)})`; c.beginPath(); c.arc(s.px,s.py,2.1,0,6.3); c.fill(); }
+    else if(armed&&i===lit&&now>=nextAt&&S==='CONSTELLATION'){ const k=.5+.5*Math.sin(now/430); glow(c,s.px,s.py,16+k*14,.35+k*.35,'255,225,170'); c.fillStyle='rgba(255,240,215,.95)'; c.beginPath(); c.arc(s.px,s.py,2.3,0,6.3); c.fill(); }
+    else { c.fillStyle='rgba(215,225,255,.42)'; c.beginPath(); c.arc(s.px,s.py,1.2,0,6.3); c.fill(); } });
+  c.globalCompositeOperation='source-over'; }
+
+function spawn(big){ const r=Math.random,ang=.55+(r()-.5)*.35,d=r();
+  const len=big?380+r()*260:60+r()*200*(.4+d), sp=big?950+r()*400:(500+r()*1300)*(.6+d*.6);
+  meteors.push({x:r()*W*1.1-W*.2,y:r()*H*.3-20,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,len,w:big?2.2:.6+d*1.4,a:big?1:.4+d*.6,t:0,life:big?1.7+r():.7+r()*.9,warm:r()<.15}); glowK=Math.min(1,glowK+(big?.5:.15)); }
+function rate(t,tl){ const {meteorStart:s,peak:p}=tl; if(t<s+5)return 0;
+  if(t<p){ const k=(t-s-5)/(p-s-5); return (.25+Math.pow(k,1.6)*6.5)*(RM?.4:1); } return Math.max(.3,6.8*Math.exp(-(t-p)/9))*(RM?.4:1); }
+function drawFx(now,dt){ const c=cx.fx; c.clearRect(-24,-24,W+48,H+48);
+  if(glowK>.01){ const g=c.createLinearGradient(0,0,0,HZ); g.addColorStop(0,`rgba(120,150,255,${glowK*.05})`); g.addColorStop(1,'rgba(120,150,255,0)'); c.fillStyle=g; c.fillRect(-24,-24,W+48,HZ+24); glowK*=Math.exp(-dt*1.2); }
+  drawConst(c,now);
+  c.globalCompositeOperation='lighter';
+  for(let i=parts.length-1;i>=0;i--){ const p=parts[i]; p.l-=dt; if(p.l<=0){parts.splice(i,1);continue;} p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=.97; p.vy*=.97;
+    c.fillStyle=`rgba(210,225,255,${.7*p.l/p.m})`; c.fillRect(p.x,p.y,1.4,1.4); }
+  for(let i=meteors.length-1;i>=0;i--){ const m=meteors[i]; m.t+=dt; m.x+=m.vx*dt; m.y+=m.vy*dt;
+    if(m.t>m.life||m.y>HZ*.96){meteors.splice(i,1);continue;}
+    const env=Math.sin(Math.PI*m.t/m.life), sp=Math.hypot(m.vx,m.vy), ux=m.vx/sp, uy=m.vy/sp, L=m.len*(.4+.6*env), tx2=m.x-ux*L, ty2=m.y-uy*L, col=m.warm?'255,222,170':'205,222,255';
+    const g=c.createLinearGradient(tx2,ty2,m.x,m.y); g.addColorStop(0,`rgba(${col},0)`); g.addColorStop(1,`rgba(${col},${m.a*env})`);
+    c.strokeStyle=g; c.lineWidth=m.w; c.lineCap='round'; c.beginPath(); c.moveTo(tx2,ty2); c.lineTo(m.x,m.y); c.stroke();
+    glow(c,m.x,m.y,m.w*7,.35*m.a*env,col); }
+  c.globalCompositeOperation='source-over'; }
+
+/* ---------- CassettePlayer: pickup, drag/click-to-hold, insertion ---------- */
+const player=$('player'), tape=$('tape'); let home={x:0,y:0}, cur={x:0,y:0,r:-10}, tg={x:0,y:0,r:-10}, held=false, justPicked=false, dragging=false, inserting=false, sx=0, sy=0;
+function homePos(){ home={x:W*.4,y:H*.905}; if(!held&&!inserting){ cur={x:home.x,y:home.y,r:-10}; tg={...cur}; } }
+function slotCenter(){ const r=$('slot').getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; }
+tape.addEventListener('pointerdown',e=>{ if(inserting||held||(S!=='CASSETTE_REVEAL'&&S!=='TAPE_INSERTION'))return; e.preventDefault();
+  if(S==='CASSETTE_REVEAL') go('TAPE_INSERTION'); sfx('tapePickup'); held=true; justPicked=true; dragging=false; sx=e.clientX; sy=e.clientY; tg.x=e.clientX; tg.y=e.clientY; player.classList.add('ready'); });
+addEventListener('pointermove',e=>{ if(!held)return; if(justPicked&&Math.hypot(e.clientX-sx,e.clientY-sy)>8)dragging=true; tg.x=e.clientX; tg.y=e.clientY; });
+addEventListener('pointerup',()=>{ if(!held)return; if(justPicked&&!dragging){justPicked=false;return;} release(); });
+function release(){ held=false; justPicked=false; tape.classList.remove('held'); const s=slotCenter();
+  if(Math.hypot(cur.x-s.x,cur.y-s.y)<150) insert(); else { tg.x=home.x; tg.y=home.y; tg.r=-10; tape.classList.add('held'); tape.classList.remove('held'); player.classList.remove('near'); } }
+function insert(){ inserting=true; const s=slotCenter(); tg.x=s.x; tg.y=s.y; tg.r=0; player.classList.remove('near'); sfx('cassetteInsert');
+  setTimeout(()=>{ tape.style.visibility='hidden'; player.classList.add('loaded'); },380);
+  setTimeout(()=>{ player.classList.add('closed'); sfx('doorClose'); },650);
+  setTimeout(async()=>{ player.classList.add('led'); await Song.play(); go('SONG_PLAYING'); if(!Song.paused)document.body.classList.add('spin'); },1100); }
+function updateTape(dt){ const k=1-Math.exp(-dt*(inserting?18:14));
+  if(held) tg.r=clamp((tg.x-cur.x)*.12,-16,16);
+  cur.x+=(tg.x-cur.x)*k; cur.y+=(tg.y-cur.y)*k; cur.r+=(tg.r-cur.r)*k;
+  const w=clamp(W*.09,100,150),h=w*104/160; tape.style.transform=`translate(${cur.x-w/2}px,${cur.y-h/2}px) rotate(${cur.r}deg)`;
+  if(held&&!inserting){ const s=slotCenter(); player.classList.toggle('near',Math.hypot(cur.x-s.x,cur.y-s.y)<150); } }
+
+/* ---------- Main loop ---------- */
+let lastT=performance.now(),fr=0,acc=0;
+function frame(now){ requestAnimationFrame(frame);
+  const dt=Math.min(.05,(now-lastT)/1000); lastT=now; fr++;
+  mx+=(tx-mx)*(1-Math.exp(-dt*3)); my+=(ty-my)*(1-Math.exp(-dt*3));
+  if(!TOUCH&&!RM) names.forEach(n=>{ cv[n].style.transform=`translate3d(${-mx*amp[n]}px,${-my*amp[n]}px,0)`; });
+  LOOPS.forEach(l=>l.update(dt)); Song.tick(dt); const t=Song.time(), tl=Song.tl();
+  if(S==='SONG_PLAYING'&&t>=tl.meteorStart) go('METEOR_SHOWER');
+  if(S==='METEOR_SHOWER'&&t>=tl.peak+CONFIG.endingDelayAfterPeak) go('ENDING');
+  if((S==='METEOR_SHOWER'||S==='ENDING')&&!Song.paused){ acc+=rate(t,tl)*dt; while(acc>=1){ acc--; spawn(Math.random()<.07); } }
+  const tgtDim=S==='SONG_PLAYING'?.55:S==='METEOR_SHOWER'?.3:S==='ENDING'?.34:(S==='CASSETTE_REVEAL'||S==='TAPE_INSERTION')?.6:1;
+  cdim+=(tgtDim-cdim)*(1-Math.exp(-dt*.8));
+  const sec=now/1000, tw=RM?.08:.5;
+  if(fr%2===0){ drawStars(cx.far,far,sec,tw); drawOcean(sec); }
+  if(fr%2===1) drawStars(cx.near,near,sec,tw);
+  drawFx(performance.now(),dt); updateTape(dt); }
+
+/* ---------- Boot + UI wiring ---------- */
+function resize(){ W=innerWidth; H=innerHeight; HZ=H*.64; DPR=Math.min(2,devicePixelRatio||1);
+  names.forEach(n=>{ cv[n].width=(W+48)*DPR; cv[n].height=(H+48)*DPR; cx[n].setTransform(DPR,0,0,DPR,24*DPR,24*DPR); });
+  drawSky(); makeStars(); makeShim(); drawBeach(); layout(); homePos(); }
+(function grain(){ const c=document.createElement('canvas'); c.width=c.height=160; const g=c.getContext('2d'),d=g.createImageData(160,160);
+  for(let i=0;i<d.data.length;i+=4){ const v=Math.random()*255; d.data[i]=d.data[i+1]=d.data[i+2]=v; d.data[i+3]=255; } g.putImageData(d,0,0); $('grain').style.backgroundImage=`url(${c.toDataURL()})`; })();
+addEventListener('resize',resize); resize();
+if(CONFIG.silhouette.src){ silImg=new Image(); silImg.onload=()=>drawBeach(); silImg.src=CONFIG.silhouette.src; }
+document.title=CONFIG.text.pageTitle; $('introLine').textContent=CONFIG.text.introLine; $('enter').textContent=CONFIG.text.enterButton; $('tape').setAttribute('aria-label',CONFIG.text.tapeLabel); $('mute').setAttribute('aria-label',CONFIG.text.mute); $('pause').setAttribute('aria-label',CONFIG.text.pause); setTimeout(()=>show($('intro')),700);
+function arm(delay=900){ armed=true; nextAt=performance.now()+delay; setHint(CONFIG.text.hint); }
+$('enter').onclick=()=>{ if(!ac){ ac=new (window.AudioContext||window.webkitAudioContext)(); master=ac.createGain(); master.connect(ac.destination); } Song.init(); LOOPS.forEach(l=>l.start()); go('CONSTELLATION'); };
+requestAnimationFrame(frame);
+</script>
+</body></html>
